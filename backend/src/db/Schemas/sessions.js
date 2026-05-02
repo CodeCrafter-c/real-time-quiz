@@ -1,9 +1,12 @@
 import mongoose from "mongoose";
+import Quiz from "./quiz.js";
+import Poll from "./poll.js";
+// import OpenEnded from "./openEnded";
 
 const sessionSchema = new mongoose.Schema({
   type: {
     type: String,
-    enum: ["quiz", "poll", "open_ended"],
+    enum: ["Quiz", "Poll", "OpenEnded"],
     required: true
   },
   contentId: {
@@ -42,4 +45,6 @@ const sessionSchema = new mongoose.Schema({
   }
 }, { timestamps: true });       
 
-export default mongoose.model("Session", sessionSchema);    
+const Session = mongoose.model("Session", sessionSchema);    
+
+export default Session;

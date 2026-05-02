@@ -9,6 +9,7 @@ import { customAlphabet } from "nanoid";
 import Poll from "../db/Schemas/poll.js";
 import Session from "../db/Schemas/sessions.js";
 
+
 const userRouter = Router();
 
 
@@ -33,7 +34,6 @@ userRouter.post("/register", async (req, res) => {
 
 userRouter.post("/login", async (req, res) => {
   const { email, password } = req.body;
-
   if (!email || !password) {
     return res.status(400).json({
       message: "both fields mandatory"
@@ -62,9 +62,9 @@ userRouter.post("/login", async (req, res) => {
 
 
 userRouter.post("/quiz", authenticate, async (req, res) => {
-  const { quizData } = req.body;
+  const { questions,title } = req.body;
 
-  const valid = quizValidation.safeParse({ questions: quizData });
+  const valid = quizValidation.safeParse({ title,questions });
 
   if (!valid.success) {
     return res.status(400).json({
@@ -74,7 +74,8 @@ userRouter.post("/quiz", authenticate, async (req, res) => {
 
   const quiz = new Quiz({
     host: req.user_id,
-    questions: quizData
+    title:title,
+    questions: questions
   });
 
   const savedQuiz = await quiz.save();
@@ -87,41 +88,41 @@ userRouter.post("/quiz", authenticate, async (req, res) => {
 
 
 userRouter.post("/create-session/:type/:id", authenticate, async (req, res) => {
-
+  
   const parsed = sessionValidation.safeParse(req.params);
-
+  
   if (!parsed.success) {
     return res.status(400).json({
       message: parsed.error.issues[0].message
     });
   }
-
+  
   const { type, id } = parsed.data;
-
+  
   let contentExists = null;
-
-  if (type === "quiz") {
+  
+  if (type.toLowerCase() === "quiz") {
     contentExists = await Quiz.findById(id);
-  } else if (type === "poll") {
+  } else if (type.toLowerCase() === "poll") {
     contentExists = await Poll.findById(id);
   }
-
+  
   if (!contentExists) {
     return res.status(400).json({
       message: `${type} not found`
     });
   }
-
+  
   const IsSameUser= contentExists.host?.toString() === req.user_id.toString();
-
+  
   if(!IsSameUser){
     return res.status(400).json({
       message:`you are not authorized to create session for this ${type}`
     })
   }
-
+  
   const joinCode = customAlphabet("1234567890", 6)();
-
+  
   const session = new Session({
     type,
     contentId: id,         
@@ -131,9 +132,9 @@ userRouter.post("/create-session/:type/:id", authenticate, async (req, res) => {
     participants: [],
     currentQuestionIndex: 0
   });
-
+  
   const savedSession = await session.save();
-
+  
   return res.status(201).json({
     message: "session created successfully",
     session_id: String(savedSession._id),
@@ -142,23 +143,72 @@ userRouter.post("/create-session/:type/:id", authenticate, async (req, res) => {
 });
 
 
-userRouter.post("/join-session",async(req,res)=>{
+userRouter.post("/join-session",authenticate,async(req,res)=>{
   const {joinCode}=req.body;
-   
+  if(!joinCode){
+    return res.status(400).json({
+      message:"joinCode is mandatory"
+    })
+  }
   const session=await Session.findOne({joinCode});
   if(!session){
     return res.status(400).json({
       message:"session not found"
     })
   }
-
-  session.participants.push(req.user_id);
+  
+  if(session.status!=="lobby"){
+    return res.status(400).json({
+      message:"session is not in lobby"
+    })
+  }
+  
+  if(session.hostId.toString() === req.user_id.toString()){
+    return res.status(400).json({
+      message:"host cannot join session"
+    })
+  }
+  
+  if(session.participants.includes(req.user_id.toString())){
+    return res.status(400).json({
+      message:"already joined session"
+    })
+  }
+  const newParticipant=req.user_id.toString();
+  session.participants.push(newParticipant);
   await session.save();
-
+  
   return res.status(200).json({
     message:"joined session successfully",
-    session_id:String(session._id)
+    session_id:String(session._id),
+    role:"participant"
   })
 })
 
+
+userRouter.get("/me", authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user_id);  
+    if (!user) {
+      return res.status(404).json({ message: "user not found" });
+    }
+
+    const [quizzes, polls] = await Promise.all([
+      Quiz.find({ host: req.user_id }, { title: 1 }).lean(),
+      Poll.find({ host: req.user_id }, { title: 1 }).lean()
+    ]);
+
+    const content = [
+      ...quizzes.map(q => ({ id: q._id, title: q.title, type: "quiz" })),
+      ...polls.map(p => ({ id: p._id, title: p.title, type: "poll" }))
+    ];
+
+    return res.status(200).json({
+      message: "content fetched successfully",
+      content
+    });
+  } catch (err) {
+    return res.status(500).json({ message: "something went wrong" });
+  }
+});
 export default userRouter;

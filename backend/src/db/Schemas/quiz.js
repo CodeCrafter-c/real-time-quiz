@@ -11,12 +11,16 @@ const QuestionSchema = new Schema({
     validate: v => v.length >= 2
   },
   correctAnswer: {
-    type: Number, // index
+    type: Number,
     required: true
   }
 });
 
 const quizSchema = new Schema({
+  title: {
+    type: String,
+    required: true
+  },
   host: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
