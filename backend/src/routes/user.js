@@ -169,7 +169,10 @@ userRouter.post("/join-session",authenticate,async(req,res)=>{
     })
   }
   
-  if(session.participants.includes(req.user_id.toString())){
+  const isAlreadyParticipant =session.participants.some(
+  p => p.toString() === req.user_id.toString()
+)
+  if(isAlreadyParticipant){
     return res.status(400).json({
       message:"already joined session"
     })
