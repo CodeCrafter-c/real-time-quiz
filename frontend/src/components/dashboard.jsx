@@ -1,12 +1,10 @@
 import { useState,useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import socket from "../socket.js";
 import axios from "axios";
 function Dashboard() {
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState("");
   const [content,setContent]=useState([]);
-  // const [poll,setPoll]=useState([]);
   const navigate = useNavigate();
   async function handleJoin() {
     if (!joinCode.trim()) {
@@ -23,12 +21,16 @@ function Dashboard() {
     const res=await axios.post(`${import.meta.env.VITE_BACKEND_PATH}/api/v1/users/join-session`, {
       joinCode
     }, { withCredentials: true })
-    if (res.data.session_id) {
-      navigate(`/session/participants/${res.data.session_id}`);
+    if (res.data.sessionId) {
+      navigate(`/session/new/${res.data.sessionId}`,{state:{
+        role:"participant",
+        sessionId:res.data.sessionId
+      }});
     } else {
       setError(res.data.message || "Something went wrong");
     }
     }catch(err){
+      console.log("error",err)
       setError(err.response?.data?.message || "Something went wrong");
     }
   }

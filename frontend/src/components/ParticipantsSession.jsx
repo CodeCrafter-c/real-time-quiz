@@ -20,7 +20,7 @@ function ParticipantSession() {
       setParticipantCount(prev => prev + 1)
     })
 
-    // host started the quiz — next page you'll build
+
     socket.on("question_started", ({ question }) => {
       console.log("question started", question)
       // setStatus("question") — you'll handle this next

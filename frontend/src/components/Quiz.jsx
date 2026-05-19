@@ -27,7 +27,21 @@ function Quiz() {
   }, [])
 
   async function handleStartSession() {
-    navigate(`/session/new/${quizId}`)
+    try {
+      const res = await axios.post(`${BACKEND_URL}/api/v1/users/create-session/Quiz/${quizId}`, {}, {
+        withCredentials: true
+      })
+      navigate(`/session/new/${res.data.sessionId}`, {
+        state: {
+          role: "host",
+          joinCode: res.data.joinCode,
+          sessionId: res.data.sessionId
+        }
+      })
+    }
+    catch (err) {
+      setError(err.response?.data?.message || "cannot start a session right now!")
+    }
   }
 
   if (loading) return (

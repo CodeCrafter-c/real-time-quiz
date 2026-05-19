@@ -1,5 +1,5 @@
 import { Route, Routes, BrowserRouter, Navigate } from "react-router-dom"
-import Dashboard from "./components/Dashboard"
+import Dashboard from "./components/dashboard"
 import Landing from "./components/Landing"
 import Quiz from "./components/Quiz"
 import Session from "./components/Session"
@@ -25,14 +25,9 @@ function App() {
                 <Quiz />
             </ProtectedRoute>
         } />
-        <Route path="/session/new/:quizId" element={
+        <Route path="/session/new/:sessionId" element={
             <ProtectedRoute>
                 <Session />
-            </ProtectedRoute>
-        } />
-        <Route path="/session/participants/:sessionId" element={
-            <ProtectedRoute>
-                <ParticipantSession />
             </ProtectedRoute>
         } />
       </Routes>

@@ -1,44 +1,54 @@
 import { useEffect, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom";
-import axios from "axios";
+import { useLocation, useParams } from "react-router-dom";
 import socket from "../socket";
+import Lobby from "./lobby";
+import Question from "./question";
 
 function Session() {
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_PATH;
-  const navigate = useNavigate();
-  const { quizId } = useParams();
   const [error, setError] = useState("");
-  const [joinCode, setJoinCode] = useState("");
-  const [sessionId, setSessionId] = useState("");
   const [participants, setParticipants] = useState([]);
+  const [phase, setPhase] = useState("lobby");
+  const [options, setOptions] = useState([]);
+  const [quesData, setQuesData] = useState({
+    question:"",  
+    questionId:"",
+    currentQuestionIndex:0,
+    totalQuestions:0,
+    title:"",
+    revealAt:0,
+    answerEndAt:0
+  });
+  const {role,setRole}=useState("");
+  const [joinCode,setJoinCode] = useState("");
+  const {sessionId} = useParams()
 
   useEffect(() => {
-    async function handleStartSession() {
-      try {
-        const res = await axios.post(
-          `${BACKEND_URL}/api/v1/users/create-session/Quiz/${quizId}`,
-          {},
-          { withCredentials: true }
-        )
-        socket.emit("join_session", { sessionId: res.data.session_id })
-        setJoinCode(res.data.joinCode);
-        setSessionId(res.data.session_id);
-      } catch (err) {
-        setError(err.response?.data?.message || "Could not start session")
+    socket.emit("join_session", {sessionId})
+
+    socket.on("session_joined", ({data}) => {
+      console.log("joined as", data.role, data.sessionId)
+      setRole(data.role);
+      if(data.joinCode){
+        setJoinCode(data.joinCode)
       }
-    }
-
-    handleStartSession();
-
-    // host joined the room successfully
-    socket.on("session_joined", ({ role, sessionId }) => {
-      console.log("joined as", role, sessionId)
+      setParticipants(data.participants)
     })
 
-    // someone new joined
-    socket.on("user_joined", ({ userId, socketId }) => {
-      console.log("user joined", userId)
+    socket.on("user_joined", ({ userId }) => {
+      console.log("joined",userId)
       setParticipants(prev => [...prev, userId])
+    })
+
+    socket.on("question_started", ({data}) => {
+      console.log("question started", data)
+      setQuesData(data);
+      setOptions([])       
+      setPhase("question")
+    })
+
+    socket.on("options_revealed", ({ options }) => {
+      setOptions(options)
+      setPhase("options")
     })
 
     socket.on("error", ({ message }) => {
@@ -48,22 +58,38 @@ function Session() {
     return () => {
       socket.off("session_joined")
       socket.off("user_joined")
+      socket.off("question_started")
+      socket.off("options_revealed")
       socket.off("error")
     }
   }, [])
 
-  return (
-    <div className="flex flex-col items-center justify-center h-screen">
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-      <p className="text-4xl font-medium">Join using this code</p>
-      <h1 className="text-6xl font-bold">{joinCode}</h1>
-      <p className="text-gray-400 mt-2">Share this with your friends</p>
-      {participants.length > 0 && (
-        <p className="text-sm text-gray-500 mt-6">
-          {participants.length} participant{participants.length > 1 ? "s" : ""} joined
-        </p>
-      )}
-    </div>
+  function handleStart() {
+    socket.emit("start_question", { sessionId })
+  }
+
+  if (phase === "lobby") return (
+    <Lobby
+      role={role}
+      joinCode={joinCode}
+      participants={participants}
+      onStart={handleStart}
+      error={error}
+    />
+  )
+
+  if (phase === "question" || phase === "options") return (
+    <Question
+      role={role}
+      question={quesData.question}
+      questionId={quesData.questionId}
+      currentQuestionIndex={quesData.currentQuestionIndex}
+      totalQuestions={quesData.totalQuestions}
+      title={quesData.title}
+      options={options}
+      revealAt={quesData.revealAt}
+      answerEndAt={quesData.answerEndAt}
+    />
   )
 }
 
