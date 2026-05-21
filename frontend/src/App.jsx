@@ -3,7 +3,6 @@ import Dashboard from "./components/dashboard"
 import Landing from "./components/Landing"
 import Quiz from "./components/Quiz"
 import Session from "./components/Session"
-import ParticipantSession from "./components/ParticipantsSession"
 
 function ProtectedRoute({ children }) {
   const isAuth = document.cookie.includes("token")

@@ -1,37 +1,32 @@
+export default function Lobby({ gameState, onStart }) {
+  const { role, joinCode, participants, error } = gameState;
 
-export default function Lobby({role, joinCode, participants, onStart, error }) {
-
-  if(role==="participant"){
-    return(
-      <div className="flex flex-col items-center justify-center h-screen">
-        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+  if (role === "participant") {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        {error && <p className="text-error text-sm mb-4">{error}</p>}
         <p className="text-4xl font-medium">Waiting for host to start the quiz</p>
-        {participants.length > 0 && (
-          <p className="text-sm text-gray-500 mt-6">
-            {participants.length} participant{participants.length > 1 ? "s" : ""} joined
-          </p>
-        )}
+        {/* FIX: participants starts at 0 and increments per user_joined event,
+            show count only after at least 1 has joined */}
+        <p className="text-sm text-base-content/60 mt-6">
+          {participants} participant{participants !== 1 ? "s" : ""} in lobby
+        </p>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen">
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+    <div className="flex flex-col items-center justify-center h-full">
+      {error && <p className="text-error text-sm mb-4">{error}</p>}
       <p className="text-4xl font-medium">Join using this code</p>
-      <h1 className="text-6xl font-bold">{joinCode}</h1>
-      <p className="text-gray-400 mt-2">Share this with your friends</p>
-      {participants.length > 0 && (
-        <p className="text-sm text-gray-500 mt-6">
-          {participants.length} participant{participants.length > 1 ? "s" : ""} joined
-        </p>
-      )}
-      <button
-        onClick={onStart}
-        className="mt-6 px-4 py-2 bg-black text-white text-sm rounded-lg hover:bg-gray-800"
-      >
+      <h1 className="text-6xl font-bold my-4">{joinCode}</h1>
+      <p className="text-base-content/60 mt-2">Share this with your friends</p>
+      <p className="text-sm text-base-content/60 mt-6">
+        {participants} participant{participants !== 1 ? "s" : ""} joined
+      </p>
+      <button onClick={onStart} className="btn btn-primary mt-8">
         Start Quiz
       </button>
     </div>
-  )
+  );
 }
