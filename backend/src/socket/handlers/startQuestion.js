@@ -1,5 +1,7 @@
 import sessionStore from "../sessionStore.js";
 import { EVENTS } from "../events.js";
+import revealOptions from "./revealOptions.js";
+import timeUp from "./timeup.js";
 
 export default function startQuestion(io, socket, data) {
 
@@ -7,6 +9,7 @@ export default function startQuestion(io, socket, data) {
 
     const { sessionId } = data;
 
+    // only host can start
     if (socket.data.role !== "host") {
 
       socket.emit(EVENTS.ERROR, {
@@ -27,12 +30,25 @@ export default function startQuestion(io, socket, data) {
       return;
     }
 
+    if (
+      store.phase === "question" ||
+      store.phase === "options"
+    ) {
+
+      socket.emit(EVENTS.ERROR, {
+        message: "question already running"
+      });
+
+      return;
+    }
+
     const {
       questions,
       currentQuestionIndex,
       title
     } = store;
 
+    // no more questions
     if (currentQuestionIndex >= questions.length) {
 
       socket.emit(EVENTS.ERROR, {
@@ -45,6 +61,24 @@ export default function startQuestion(io, socket, data) {
     const currentQuestion =
       questions[currentQuestionIndex];
 
+    // timings
+    const now = Date.now();
+
+    const revealAt = now + 15000;
+
+    const answerEndAt = revealAt + 20000;
+
+    // store state
+    store.phase = "question";
+
+    store.currentQuestionId =
+      currentQuestion._id.toString();
+
+    store.revealAt = revealAt;
+
+    store.answerEndAt = answerEndAt;
+
+    // emit question
     io.to(sessionId).emit(
       EVENTS.QUESTION_STARTED,
       {
@@ -53,12 +87,49 @@ export default function startQuestion(io, socket, data) {
         currentQuestionIndex,
         totalQuestions: questions.length,
         title,
-        revealAt: Date.now() + 15000,
-        answerEndAt: Date.now() + 35000
+        revealAt,
+        answerEndAt
       }
     );
 
-    store.currentQuestionIndex++;
+    // cleanup old timers if somehow present
+    if (store.revealTimeout) {
+      clearTimeout(store.revealTimeout);
+    }
+
+    if (store.timeUpTimeout) {
+      clearTimeout(store.timeUpTimeout);
+    }
+
+    // reveal options timer
+    const revealTimeout = setTimeout(() => {
+
+      revealOptions(
+        io,
+        sessionId,
+        currentQuestion._id
+      );
+
+      store.phase = "options";
+
+      // time up timer
+      const timeUpTimeout = setTimeout(() => {
+
+        timeUp(
+          io,
+          sessionId,
+          currentQuestion._id
+        );
+
+        // store.phase = "results";
+        store.currentQuestionIndex++;
+      }, 20000);
+
+      store.timeUpTimeout = timeUpTimeout;
+
+    }, 15000);
+
+    store.revealTimeout = revealTimeout;
 
   } catch (err) {
 

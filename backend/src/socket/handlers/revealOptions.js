@@ -1,66 +1,26 @@
 import sessionStore from "../sessionStore.js";
 import { EVENTS } from "../events.js";
+// import Session from "../../db/Schemas/sessions.js";
 
-export default function revealOptions(io, socket, data) {
+export default function revealOptions(io, sessionId, questionId) {
 
-  try {
+  const store = sessionStore.get(sessionId);
+  if (!store) return;
 
-    const {
-      sessionId,
-      questionId
-    } = data;
+  const questionData = store.questions.find(
+    q => q._id.toString() === questionId.toString()
+  );
 
-    if (socket.data.role !== "host") {
+  if (!questionData) return;
 
-      socket.emit(EVENTS.ERROR, {
-        message: "only host can reveal options"
-      });
+  store.answers[questionId] = {};
 
-      return;
+  store.quesStartTime = Date.now();
+  io.to(sessionId).emit(
+    EVENTS.OPTIONS_REVEALED,
+    {
+      questionId,
+      options: questionData.options
     }
-
-    const store = sessionStore.get(sessionId);
-
-    if (!store) {
-
-      socket.emit(EVENTS.ERROR, {
-        message: "session not found"
-      });
-
-      return;
-    }
-
-    const questionData =
-      store.questions.find(
-        q => q._id.toString() === questionId
-      );
-
-    if (!questionData) {
-
-      socket.emit(EVENTS.ERROR, {
-        message: "question not found"
-      });
-
-      return;
-    }
-
-    store.answers[questionId] = {};
-    store.quesStartTime = Date.now();
-
-    io.to(sessionId).emit(
-      EVENTS.OPTIONS_REVEALED,
-      {
-        questionId,
-        options: questionData.options
-      }
-    );
-
-  } catch (err) {
-
-    console.error("revealOptions error:", err);
-
-    socket.emit(EVENTS.ERROR, {
-      message: "something went wrong"
-    });
-  }
+  );
 }

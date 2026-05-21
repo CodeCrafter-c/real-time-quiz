@@ -137,7 +137,7 @@ userRouter.post("/create-session/:type/:id", authenticate, async (req, res) => {
   
   return res.status(201).json({
     message: "session created successfully",
-    session_id: String(savedSession._id),
+    sessionId: String(savedSession._id),
     joinCode
   });
 });
@@ -183,7 +183,7 @@ userRouter.post("/join-session",authenticate,async(req,res)=>{
   
   return res.status(200).json({
     message:"joined session successfully",
-    session_id:String(session._id),
+    sessionId:String(session._id),
     role:"participant"
   })
 })

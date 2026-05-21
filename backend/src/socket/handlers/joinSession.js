@@ -1,14 +1,16 @@
 import Session from "../../db/Schemas/sessions.js";
 import sessionStore from "../sessionStore.js";
 import { EVENTS } from "../events.js";
+import { ObjectId } from "mongodb";
 
 export default async function joinSession(io, socket, data) {
 
   try {
 
     const { sessionId } = data;
+    console.log(sessionId);
 
-    const session = await Session.findById(sessionId);
+    const session = await Session.findById(new ObjectId(sessionId));
 
     if (!session) {
       socket.emit(EVENTS.ERROR, {
@@ -48,11 +50,23 @@ export default async function joinSession(io, socket, data) {
         currentQuestionIndex: 0,
         answers: {},
         leaderboard: {},
-        quesStartTime: null
+        quesStartTime: null,
+        hostSocketId: socket.id,
+        hostId:session.hostId,
+        participantsCount:0,
+        userSockets:{}
       });
     }
 
+    if(!isHost){
+      sessionStore.get(sessionId).userSockets[userId] = socket.id;
+    }
+
     socket.join(sessionId);
+
+    if(!isHost){
+      sessionStore.get(sessionId).participantsCount++;
+    }
 
     socket.data = {
       sessionId,
@@ -63,16 +77,18 @@ export default async function joinSession(io, socket, data) {
     socket.to(sessionId).emit(
       "user_joined",
       {
-        userId
+        userId,
+        participantsCount: sessionStore.get(sessionId).participantsCount,
       }
     );
-
+    
+    console.log("participants: ",sessionStore.get(sessionId).participantsCount)
     socket.emit(EVENTS.SESSION_JOINED, {
       data:{
         role: socket.data.role,
         sessionId,
         joinCode: session.joinCode,
-        participants: session.participants.length,
+        participantsCount: sessionStore.get(sessionId).participantsCount,
       }
     });
 

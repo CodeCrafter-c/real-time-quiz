@@ -4,9 +4,8 @@ import authSocket from "./authSocket.js";
 
 import joinSession from "./handlers/joinSession.js";
 import startQuestion from "./handlers/startQuestion.js";
-import revealOptions from "./handlers/revealOptions.js";
 import submitAnswer from "./handlers/submitAnswer.js";
-import timeUp from "./handlers/timeup.js";
+import getLeaderboard from "./handlers/getLeaderboard.js";
 
 import { EVENTS } from "./events.js";
 
@@ -33,16 +32,12 @@ export default function initializeSocket(server) {
       startQuestion(io, socket, data)
     );
 
-    socket.on(EVENTS.REVEAL_OPTIONS, (data) =>
-      revealOptions(io, socket, data)
-    );
-
     socket.on(EVENTS.SUBMIT_ANSWER, (data) =>
       submitAnswer(io, socket, data)
     );
 
-    socket.on(EVENTS.TIME_UP, (data) =>
-      timeUp(io, socket, data)
+    socket.on(EVENTS.GET_LEADERBOARD, (data) =>
+      getLeaderboard(io, socket, data)
     );
 
     socket.on("disconnect", () => {
