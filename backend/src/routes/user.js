@@ -121,6 +121,8 @@ userRouter.post("/create-session/:type/:id", authenticate, async (req, res) => {
     });
   }
 
+  
+
   const joinCode = customAlphabet("1234567890", 6)();
 
   const session = new Session({
@@ -137,25 +139,29 @@ userRouter.post("/create-session/:type/:id", authenticate, async (req, res) => {
 
   const sessionId = String(savedSession._id);
 
-  
-  await redis.set(
+  await redis.set(`session:${sessionId}:questions`,JSON.stringify({
+    questions:contentExists.questions,
+    title:contentExists.title
+  }));
+
+  await redis.hset(
     `session:${sessionId}:meta`,
-    JSON.stringify({
-      sessionId,
-      hostId: String(savedSession.hostId),
-      joinCode: savedSession.joinCode,
-      status: savedSession.status,
-      type: savedSession.type,
-      currentQuestionIndex: 0,
-    })
+      "sessionId",sessionId,
+      "hostId",String(savedSession.hostId),
+      "joinCode",savedSession.joinCode,
+      "status",savedSession.status,
+      "type",savedSession.type,
+      "currentQuestionIndex",0,
   );
 
   await redis.set(
     `session:joinCode:${joinCode}`,
     sessionId
   );
-
+  await redis.expire(`session:${sessionId}:meta`, 86400);
+  await redis.expire(`session:joinCode:${joinCode}`, 86400);
   await redis.del(`session:${sessionId}:participants`); 
+  await redis.expire(`session:${sessionId}:questions`, 86400);
 
  return res.status(201).json({
     message: "session created successfully",
@@ -189,24 +195,22 @@ userRouter.post("/join-session", authenticate, async (req, res) => {
 
     sessionId = String(session._id);
 
-    await redis.set(
+    await redis.hset(
       `session:${sessionId}:meta`,
-      JSON.stringify({
-        sessionId,
-        hostId: String(session.hostId),
-        joinCode: session.joinCode,
-        status: session.status,
-        type: session.type,
-        currentQuestionIndex: session.currentQuestionIndex,
-      })
+        "sessionId",sessionId,
+        "hostId",String(session.hostId),
+        "joinCode",session.joinCode,
+        "status",session.status,
+        "type",session.type,
+        "currentQuestionIndex",session.currentQuestionIndex,
     );
 
     await redis.set(`session:joinCode:${joinCode}`, sessionId);
   } else {
     console.log("joined from redis")
-    const raw = await redis.get(`session:${sessionId}:meta`);
+    const raw = await redis.hgetall(`session:${sessionId}:meta`);
 
-    if (!raw) {
+    if (!raw || Object.keys(raw).length === 0) {
       session = await Session.findOne({ joinCode });
 
       if (!session) {
@@ -217,23 +221,19 @@ userRouter.post("/join-session", authenticate, async (req, res) => {
 
       sessionId = String(session._id);
 
-      await redis.set(
+      await redis.hset(
         `session:${sessionId}:meta`,
-        JSON.stringify({
-          sessionId,
-          hostId: String(session.hostId),
-          joinCode: session.joinCode,
-          status: session.status,
-          type: session.type,
-          currentQuestionIndex: session.currentQuestionIndex,
-        })
+        "sessionId",sessionId,
+        "hostId",String(session.hostId),
+        "joinCode",session.joinCode,
+        "status",session.status,
+        "type",session.type,
+        "currentQuestionIndex",session.currentQuestionIndex,
       );
     }
   }
 
-  const sessionMeta = JSON.parse(
-    await redis.get(`session:${sessionId}:meta`)
-  );
+  const sessionMeta =await redis.hgetall(`session:${sessionId}:meta`);
 
   if (sessionMeta.status !== "lobby") {
     return res.status(400).json({
@@ -248,19 +248,19 @@ userRouter.post("/join-session", authenticate, async (req, res) => {
   }
 
   const participantsKey = `session:${sessionId}:participants`;
-
   const isAlreadyParticipant = await redis.sismember(
     participantsKey,
     String(req.user_id)
   );
-
+  
   if (isAlreadyParticipant) {
     return res.status(400).json({
       message: "already joined session",
     });
   }
-
+  
   await redis.sadd(participantsKey, String(req.user_id));
+  await redis.expire(participantsKey, 86400);
 
   return res.status(200).json({
     message: "joined session successfully",

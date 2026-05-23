@@ -1,6 +1,9 @@
-import sessionStore from "../sessionStore.js";
 import { EVENTS } from "../events.js";
+import redis from "../../config/redis.js";
+
+
 export default async function submitAnswer(io, socket, data) {
+
 
   try {
 
@@ -9,20 +12,25 @@ export default async function submitAnswer(io, socket, data) {
       questionId,
       answer
     } = data;
-    // console.log("submitAnswer",data)
-    const store = sessionStore.get(sessionId);
+    
+    const sessionData=await redis.hgetall(`session:${sessionId}:meta`);
 
-
-    if (!store) {
+    if (!sessionData || Object.keys(sessionData).length === 0) {
       socket.emit(EVENTS.ERROR, {
         message: "session not found"
       });
       return;
     }
 
+    let timings=await redis.get(`session:${sessionId}:timings`);
+    timings=JSON.parse(timings);
+
+    let questionsData=await redis.get(`session:${sessionId}:questions`);
+    questionsData=JSON.parse(questionsData);
+
     const userId = socket.user.userId;
 
-    if(store.hostId.toString()===userId){
+    if(sessionData.hostId.toString()===userId.toString()){
       socket.emit(EVENTS.ERROR, {
         message: "host cannot submit answer"
       });
@@ -32,30 +40,31 @@ export default async function submitAnswer(io, socket, data) {
 
     const answeredAt = Date.now();
 
-    if(answeredAt>store.answerEndAt){
+    if(answeredAt>Number(timings.answerEndAt)){
       socket.emit(EVENTS.ERROR, {
         message: "time limit exceeded"
       });
       return;
     }
     
-    if (store.phase !== "options") {
+    if (sessionData.status !== "options") {
       socket.emit(EVENTS.ERROR, {
         message: "answering phase is closed"
       });
       return;
     }
-    if(questionId!=store.currentQuestionId){
+    if(questionId.toString()!=sessionData.currentQuestionId.toString()){
       socket.emit(EVENTS.ERROR, {
         message: "this question is not active"
       });
       return;
     }
-    if (!store.answers[questionId]) {
-      store.answers[questionId] = {};
-    }
 
-    if (store.answers[questionId][userId]) {
+    
+    const hasAnswered=await redis.hexists(`session:${sessionId}:answers:${questionId}`,userId);
+    console
+
+    if (hasAnswered) {
 
       socket.emit(EVENTS.ERROR, {
         message: "already answered"
@@ -64,8 +73,7 @@ export default async function submitAnswer(io, socket, data) {
       return;
     }
 
-    const question =
-      store.questions.find(
+    const question =questionsData.questions.find(
         q => q._id.toString() === questionId.toString()
       );
 
@@ -79,10 +87,10 @@ export default async function submitAnswer(io, socket, data) {
     }
 
     const correctAnswer =
-      question.correctAnswer;
+      Number(question.correctAnswer);
 
     const isCorrect =
-      answer === correctAnswer;
+      Number(answer) === correctAnswer;
 
     let points = 0;
 
@@ -91,7 +99,7 @@ export default async function submitAnswer(io, socket, data) {
       const timeLimit = 20000;
 
       const timeTaken =
-        answeredAt - store.revealAt;
+        answeredAt - Number(timings.revealAt);
 
       const timeRatio = Math.max(
         0,
@@ -103,27 +111,29 @@ export default async function submitAnswer(io, socket, data) {
       );
     }
 
-    store.answers[questionId][userId] = {
-      answer,
-      isCorrect,
-      points
-    };
-
-    if (!store.leaderboard[userId]) {
-      store.leaderboard[userId] = 0;
-    }
-
-    store.leaderboard[userId] += points;
-
-    io.to(store.hostSocketId).emit(
-      EVENTS.ANSWER_STATS_UPDATED,
-      {
-        totalResponses:Object.keys(store.answers[questionId]).length,
-        totalParticipants:store.participantsCount,
-        questionId:questionId.toString(),
-      }
+    await redis.hset(
+      `session:${sessionId}:answers:${questionId}`,
+      userId,
+      JSON.stringify({ answer, isCorrect, points })
     );
+    await redis.expire(`session:${sessionId}:answers:${questionId}`, 86400);
 
+    const leaderboardKey=`session:${sessionId}:leaderboard`;
+    await redis.zincrby(leaderboardKey, points, userId);
+    await redis.expire(leaderboardKey, 86400);
+ 
+    
+    const hostSocketId = await redis.get(`session:${sessionId}:hostSocketId`);
+    const totalResponses = await redis.hlen(`session:${sessionId}:answers:${questionId}`);
+    const totalParticipants = await redis.scard(`session:${sessionId}:participants`);
+
+    io.to(hostSocketId).emit(EVENTS.ANSWER_STATS_UPDATED, {
+      totalResponses,
+      totalParticipants,
+      questionId: questionId.toString(),
+    });
+
+  
     socket.emit(EVENTS.SUBMITTED_ANSWER,{
       questionId:questionId.toString(),
       success:true,

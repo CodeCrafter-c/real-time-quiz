@@ -1,8 +1,8 @@
 import Session from "../../db/Schemas/sessions.js";
-import sessionStore from "../sessionStore.js";
 import { EVENTS } from "../events.js";
 import { ObjectId } from "mongodb";
 import redis from "../../config/redis.js";
+import timeStore from "../timeStore.js";
 
 export default async function joinSession(io, socket, data) {
 
@@ -14,8 +14,7 @@ export default async function joinSession(io, socket, data) {
     
     let session;
     if(checkSessionInRedis){
-      session = await redis.get(`session:${sessionId}:meta`);
-      session = JSON.parse(session);
+      session = await redis.hgetall(`session:${sessionId}:meta`);
       console.log("served from redis",session)
     }
     else{
@@ -34,9 +33,15 @@ export default async function joinSession(io, socket, data) {
         type:session.type,
         currentQuestionIndex:session.currentQuestionIndex,
       }
-      await redis.set(`session:${sessionId}:meta`,JSON.stringify(data));
-      session=await redis.get(`session:${sessionId}:meta`);
-      session = JSON.parse(session);
+      await redis.hset(`session:${sessionId}:meta`,
+      "sessionId",sessionId,
+      "hostId",String(session.hostId),
+      "joinCode",session.joinCode,
+      "status",session.status,
+      "type",session.type,
+      "currentQuestionIndex",session.currentQuestionIndex);
+      await redis.expire(`session:${sessionId}:meta`, 86400);
+      session=data
     }
 
   
@@ -57,36 +62,35 @@ export default async function joinSession(io, socket, data) {
       return;
     }
 
-    if (isHost && !sessionStore.has(sessionId)) {
+    if (isHost) {
 
-      const populated =
-        await Session.findById(sessionId)
-          .populate("contentId");
+      let questionData = await redis.get(`session:${sessionId}:questions`);
+      if(!questionData){
+        const session = await Session.findById(new ObjectId(sessionId)).populate("contentId");
+        questionData = {questions:session.contentId.questions,title:session.contentId.title};
+        await redis.set(`session:${sessionId}:questions`,JSON.stringify(questionData));
+        await redis.expire(`session:${sessionId}:questions`, 86400);
+      }
+      questionData=JSON.parse(questionData);
 
-      sessionStore.set(sessionId, {
-        title: populated.contentId.title,
-        questions: populated.contentId.questions,
-        currentQuestionIndex: 0,
-        answers: {},
-        leaderboard: {},
-        quesStartTime: null,
-        hostSocketId: socket.id,
-        hostId:session.hostId,
-        participantsCount:0,
-        userSockets:{}
-      });
+     await redis.set(`session:${sessionId}:hostSocketId`,socket.id); 
+     await redis.expire(`session:${sessionId}:hostSocketId`, 86400);
+
+     timeStore.set(sessionId,{
+      revealTimeout:null,
+      timeUpTimeout:null,
+     });
     }
+      
 
     if(!isHost){
-      sessionStore.get(sessionId).userSockets[userId] = socket.id;
+      await redis.hset(`session:${sessionId}:sockets`,`${userId}`,socket.id);
+      await redis.expire(`session:${sessionId}:sockets`, 86400);
     }
 
     socket.join(sessionId);
 
-    if(!isHost){
-      sessionStore.get(sessionId).participantsCount++;
-    }
-
+    
     socket.data = {
       sessionId,
       role: isHost ? "host" : "participant",
@@ -97,17 +101,16 @@ export default async function joinSession(io, socket, data) {
       "user_joined",
       {
         userId,
-        participantsCount: sessionStore.get(sessionId).participantsCount,
+        participantsCount: (await redis.scard(`session:${sessionId}:participants`)),
       }
     );
     
-    console.log("participants: ",sessionStore.get(sessionId).participantsCount)
     socket.emit(EVENTS.SESSION_JOINED, {
       data:{
         role: socket.data.role,
         sessionId,
         joinCode: session.joinCode,
-        participantsCount: sessionStore.get(sessionId).participantsCount,
+        participantsCount: (await redis.scard(`session:${sessionId}:participants`)),
       }
     });
 

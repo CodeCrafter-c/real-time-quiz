@@ -28,7 +28,7 @@ const sessionSchema = new mongoose.Schema({
 
   status: {
     type: String,   
-    enum: ["lobby", "active", "ended"],
+    enum: ["lobby", "active", "question", "options","timeup","results", "ended"],
     default: "lobby"    
   },
 
