@@ -1,6 +1,6 @@
 import { EVENTS } from "../events.js";
 import redis from "../../config/redis.js";
-
+import Result from "../../db/Schemas/result.js";
 export default async function getLeaderboard(io, socket, data) {
   try {
     const { sessionId } = data;
@@ -50,6 +50,31 @@ export default async function getLeaderboard(io, socket, data) {
       totalParticipants,
       totalQuestions
     });
+
+    const currentQuestionIndex = parseInt(session.currentQuestionIndex);
+    const { title, questions } = JSON.parse(await redis.get(`session:${sessionId}:questions`));
+    const isLastQuestion = currentQuestionIndex >= questions.length - 1;
+
+    if (isLastQuestion) {
+      const allRaw = await redis.zrange(`session:${sessionId}:leaderboard`, 0, -1, "REV", "WITHSCORES");
+      const allResults = [];
+      for (let i = 0; i < allRaw.length; i += 2) {
+        allResults.push({
+          userId: allRaw[i],
+          score: Number(allRaw[i + 1]),
+          rank: Math.floor(i / 2) + 1
+        });
+      }
+
+      await Result.create({
+        sessionId,
+        hostId: session.hostId,
+        title,
+        totalParticipants,
+        totalQuestions: questions.length,
+        results: allResults
+  });
+}    
 
   } catch (error) {
     console.error("getLeaderboard error:", error);

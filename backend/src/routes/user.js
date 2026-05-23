@@ -9,6 +9,7 @@ import { customAlphabet } from "nanoid";
 import Poll from "../db/Schemas/poll.js";
 import Session from "../db/Schemas/sessions.js";
 import redis from "../config/redis.js";
+import Result from "../db/Schemas/result.js";
 
 const userRouter = Router();
 
@@ -277,20 +278,45 @@ userRouter.get("/me", authenticate, async (req, res) => {
       return res.status(404).json({ message: "user not found" });
     }
 
-    const [quizzes, polls] = await Promise.all([
+    const [quizzes, polls,hostedSessions,participatedSessions] = await Promise.all([
       Quiz.find({ host: req.user_id }, { title: 1 }).lean(),
-      Poll.find({ host: req.user_id }, { title: 1 }).lean()
+      Poll.find({ host: req.user_id }, { title: 1 }).lean(),
+      Result.find({ hostId: req.user_id }).lean(),
+      Result.find({ "results.userId": req.user_id }).lean(),
     ]);
 
-    const content = [
-      ...quizzes.map(q => ({ id: q._id, title: q.title, type: "quiz" })),
-      ...polls.map(p => ({ id: p._id, title: p.title, type: "poll" }))
-    ];
+    const participated = participatedSessions.map(session => {
+      const myResult = session.results.find(r => r.userId.toString() === req.user_id.toString());
+      return {
+        sessionId: session.sessionId,
+        title: session.title,
+        completedAt: session.completedAt,
+        totalParticipants: session.totalParticipants,
+        totalQuestions: session.totalQuestions,
+        score: myResult?.score ?? 0,
+        rank: myResult?.rank ?? null
+  };
+});
 
-    return res.status(200).json({
-      message: "content fetched successfully",
-      content
-    });
+const hosted = hostedSessions.map(s => ({
+  sessionId: s.sessionId,
+  title: s.title,
+  completedAt: s.completedAt,
+  totalParticipants: s.totalParticipants,
+  totalQuestions: s.totalQuestions,
+}));
+
+const content = [
+  ...quizzes.map(q => ({ id: q._id, title: q.title, type: "quiz" })),
+  ...polls.map(p => ({ id: p._id, title: p.title, type: "poll" }))
+];
+
+return res.status(200).json({
+  message: "content fetched successfully",
+  content,
+  hostedSessions: hosted,
+  participatedSessions: participated
+});
   } catch (err) {
     return res.status(500).json({ message: "something went wrong" });
   }
