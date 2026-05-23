@@ -1,5 +1,8 @@
 export default function Leaderboard({ gameState, socket, sessionId }) {
-  const { role, leaderboard } = gameState;
+  const { role, leaderboard, totalQuestions, question } = gameState;
+  
+  const currentQuestionIndex = question?.currentQuestionIndex ?? 0;
+  const isLastQuestion = currentQuestionIndex + 1 >= totalQuestions;
 
   const handleNextQuestion = () => {
     socket.emit("start_question", { sessionId });
@@ -38,18 +41,33 @@ export default function Leaderboard({ gameState, socket, sessionId }) {
         )}
       </div>
 
-      {role === "host" ? (
-        <button 
-          onClick={handleNextQuestion}
-          className="btn btn-primary btn-lg w-full max-w-md"
-        >
-          Next Question
-        </button>
-      ) : (
-        <p className="text-base-content/60 animate-pulse mt-4">
-          Waiting for host to proceed...
-        </p>
-      )}
+      {role === "host" && (
+  isLastQuestion ? (
+    <p className="text-base-content/60 text-lg font-medium mt-4">
+      🎉 Quiz completed!
+    </p>
+  ) : (
+    <button
+      onClick={handleNextQuestion}
+      className="btn btn-primary btn-lg w-full max-w-md"
+    >
+      Next Question
+    </button>
+  )
+)}
+
+{role !== "host" && (
+  isLastQuestion ? (
+    <p className="text-lg font-medium mt-4">
+      🎉 Quiz completed! Check your final score above.
+    </p>
+  ) : (
+    <p className="text-base-content/60 animate-pulse mt-4">
+      Waiting for host to proceed...
+    </p>
+  )
+)}
+
     </div>
   );
 }

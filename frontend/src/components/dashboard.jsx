@@ -5,6 +5,8 @@ function Dashboard() {
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState("");
   const [content,setContent]=useState([]);
+const [hostedSessions, setHostedSessions] = useState([]);
+const [participatedSessions, setParticipatedSessions] = useState([]);
   const navigate = useNavigate();
   async function handleJoin() {
     if (!joinCode.trim()) {
@@ -45,16 +47,15 @@ useEffect(() => {
         `${import.meta.env.VITE_BACKEND_PATH}/api/v1/users/me`,
         { withCredentials: true }
       );
-      const content = res.data.content;
-      setContent(content);
+      setContent(res.data.content);
+      setHostedSessions(res.data.hostedSessions);
+      setParticipatedSessions(res.data.participatedSessions);
     } catch (err) {
       setError(err.response?.data?.message || "Something went wrong");
     }
   }
-
   fetchContent();
 }, []);
-
   console.log("content ",content)
   return (
   <div className="max-w-xl mx-auto py-10 px-4">
@@ -94,6 +95,39 @@ useEffect(() => {
         >
           Open
         </button>
+      </div>
+    ))}
+  </div>
+)}
+  {hostedSessions.length > 0 && (
+  <div className="mb-4">
+    <p className="text-xs text-gray-400 mb-2">Sessions you hosted</p>
+    {hostedSessions.map(s => (
+      <div key={s.sessionId} className="border border-gray-200 rounded-lg px-4 py-3 mb-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">{s.title}</span>
+          <span className="text-xs text-gray-400">{new Date(s.completedAt).toLocaleDateString()}</span>
+        </div>
+        <p className="text-xs text-gray-400 mt-1">
+          {s.totalParticipants} participants · {s.totalQuestions} questions
+        </p>
+      </div>
+    ))}
+  </div>
+)}
+
+{participatedSessions.length > 0 && (
+  <div className="mb-4">
+    <p className="text-xs text-gray-400 mb-2">Sessions you joined</p>
+    {participatedSessions.map(s => (
+      <div key={s.sessionId} className="border border-gray-200 rounded-lg px-4 py-3 mb-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">{s.title}</span>
+          <span className="text-xs text-gray-400">{new Date(s.completedAt).toLocaleDateString()}</span>
+        </div>
+        <p className="text-xs text-gray-400 mt-1">
+          Score: <span className="text-primary font-mono">{s.score}</span> · Rank: #{s.rank} of {s.totalParticipants}
+        </p>
       </div>
     ))}
   </div>

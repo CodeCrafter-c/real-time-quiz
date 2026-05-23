@@ -20,32 +20,36 @@ function Session() {
     result: null,
     leaderboard: [],
     answerCounts: null,
+    totalQuestions: 0,
   });
 
   useEffect(() => {
-    // FIX 1: socket has autoConnect:false — must connect before emitting
     if (!socket.connected) {
       socket.connect();
     }
 
-    // FIX 2: emit join_session after ensuring connection
-    socket.emit("join_session", { sessionId });
+    // handles both first connect and reconnects
+    socket.on("connect", () => {
+      socket.emit("join_session", { sessionId });
+    });
+
+    // emit immediately for the case socket is already connected
+    if (socket.connected) {
+      socket.emit("join_session", { sessionId });
+    }
 
     socket.on("session_joined", ({ data }) => {
       setGameState(prev => ({
         ...prev,
         role: data.role,
         joinCode: data.joinCode || prev.joinCode,
-        // participantsCount from store starts at 0; real count comes via user_joined
         participants: data.participantsCount ?? prev.participants,
-        phase: "lobby",
+        // no hardcoded phase — let phase replay events handle it
       }));
     });
 
-    // FIX 3: backend emits { userId }, NOT { participantsCount }
-    // increment locally on each user_joined event
-    socket.on("user_joined", ({data}) => {
-      setGameState(prev=>({ ...prev, participants:data?.participantsCount??prev.participants+1}));
+    socket.on("user_joined", ({ participantsCount }) => {
+      setGameState(prev => ({ ...prev, participants: participantsCount }));
     });
 
     socket.on("question_started", (data) => {
@@ -59,7 +63,7 @@ function Session() {
       }));
     });
 
-    socket.on("options_revealed", ({ options }) => {
+    socket.on("options_revealed", ({ questionId, options }) => {
       setGameState(prev => ({
         ...prev,
         phase: "options",
@@ -67,8 +71,6 @@ function Session() {
       }));
     });
 
-    // FIX 4: backend emits { totalResponses, totalParticipants, questionId }
-    // NOT { counts } — update answerCounts with the correct shape
     socket.on("answer_stats_updated", (data) => {
       setGameState(prev => ({
         ...prev,
@@ -80,9 +82,6 @@ function Session() {
       }));
     });
 
-    // FIX 5: show_results is the only results event (answer_result doesn't exist)
-    // host gets: { counts, correctAnswer, totalAnswered, totalCorrect }
-    // participant gets: { counts, correctAnswer, yourAnswer, isCorrect, points }
     socket.on("show_results", (data) => {
       setGameState(prev => ({
         ...prev,
@@ -91,10 +90,8 @@ function Session() {
       }));
     });
 
-    // FIX 6: submitted_answer — let participant know their answer was received
-    // (phase stays "options" until show_results arrives)
     socket.on("submitted_answer", () => {
-      // no phase change needed here; Question component tracks answered locally
+      // no phase change — Question component tracks answered locally
     });
 
     socket.on("leaderboard_data", (data) => {
@@ -103,6 +100,7 @@ function Session() {
         phase: "leaderboard",
         leaderboard: data.leaderboard,
         totalParticipants: data.totalParticipants,
+        totalQuestions: data.totalQuestions,
       }));
     });
 
@@ -111,6 +109,7 @@ function Session() {
     });
 
     return () => {
+      socket.off("connect");
       socket.off("session_joined");
       socket.off("user_joined");
       socket.off("question_started");
@@ -127,11 +126,9 @@ function Session() {
     socket.emit("start_question", { sessionId });
   }
 
-  // FIX 7: host triggers leaderboard explicitly via get_leaderboard event
   function handleShowLeaderboard() {
     socket.emit("get_leaderboard", { sessionId });
   }
-
   const renderPhase = () => {
     switch (gameState.phase) {
       case "lobby":
