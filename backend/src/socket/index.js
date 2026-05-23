@@ -6,7 +6,7 @@ import joinSession from "./handlers/joinSession.js";
 import startQuestion from "./handlers/startQuestion.js";
 import submitAnswer from "./handlers/submitAnswer.js";
 import getLeaderboard from "./handlers/getLeaderboard.js";
-
+import redis from "../config/redis.js";
 import { EVENTS } from "./events.js";
 
 export default function initializeSocket(server) {
@@ -40,9 +40,16 @@ export default function initializeSocket(server) {
       getLeaderboard(io, socket, data)
     );
 
-    socket.on("disconnect", () => {
-      console.log("disconnected", socket.id);
-    });
+    socket.on("disconnect", async () => {
+    console.log("disconnected", socket.id);
+  
+    const { sessionId, role } = socket.data;
+    if (!sessionId) return;
+
+    if (role === "host") {
+      await redis.del(`session:${sessionId}:hostSocketId`);
+    }
+});
 
   });
 
