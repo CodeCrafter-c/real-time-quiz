@@ -1,6 +1,6 @@
 import { User } from "../db/Schemas/userSchema.js";
 import jwt from "jsonwebtoken"
-const authenticate=(req,res,next)=>{
+const authenticate=async(req,res,next)=>{
   try {
     const token=req.cookies.token;
 
@@ -9,8 +9,8 @@ const authenticate=(req,res,next)=>{
         message:"not logged in"
       })
     }
-    const decoded=jwt.verify(token,"secret");
-    const isUser=User.findById(decoded.user_id);
+    const decoded=jwt.verify(token,process.env.JWT_SECRET);
+    const isUser=await User.findById(decoded.user_id);
     if(!isUser){
       return res.status(400).json({
         message:"user not found"
@@ -22,7 +22,7 @@ const authenticate=(req,res,next)=>{
     
   } catch (error) {
     console.log("here",error);
-    return res.status(400).json({
+    return res.status(500).json({
       message:"internal server error"
     })
   }

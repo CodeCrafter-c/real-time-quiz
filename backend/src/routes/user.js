@@ -10,6 +10,7 @@ import Poll from "../db/Schemas/poll.js";
 import Session from "../db/Schemas/sessions.js";
 import redis from "../config/redis.js";
 import Result from "../db/Schemas/result.js";
+import bcrypt from 'bcrypt'
 
 const userRouter = Router();
 
@@ -22,10 +23,14 @@ userRouter.post("/register", async (req, res) => {
       message: "both fields mandatory"
     });
   }
+  const salt=await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
 
-  const user = new User({ email, password });
+  const user = new User({ email, password:hashedPassword });
   const savedUser = await user.save();
 
+  const token=jwt.sign({user_id:String(savedUser._id)},process.env.JWT_SECRET);
+  res.cookie("token",token,cookieOptions);
   return res.status(201).json({
     message: "user created successfully",
     user_id: String(savedUser._id)
@@ -43,7 +48,7 @@ userRouter.post("/login", async (req, res) => {
 
   const user = await User.findOne({ email });
 
-  if (!user || user.password !== password) {
+  if (!user || !await bcrypt.compare(password, user.password)) {
     return res.status(400).json({
       message: "email or password is invalid"
     });
@@ -51,10 +56,10 @@ userRouter.post("/login", async (req, res) => {
 
   const token = jwt.sign(
     { user_id: String(user._id) },
-    "secret"
+    process.env.JWT_SECRET
   );
 
-  res.cookie("token", token);
+  res.cookie("token", token,cookieOptions);
 
   return res.status(200).json({
     message: "login successful"
